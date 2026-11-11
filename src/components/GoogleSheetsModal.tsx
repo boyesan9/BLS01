@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { AmbulanceVehicle, GoogleSheetsConfig, InspectionRecord, UserProfile } from '../types';
+import {
+  AmbulanceVehicle,
+  GoogleSheetsConfig,
+  InspectionRecord,
+  UserProfile,
+  VehicleDamageItem,
+  FuelLogRecord,
+} from '../types';
 import {
   X,
   FileSpreadsheet,
@@ -14,6 +21,8 @@ import {
   Activity,
   Truck,
   Users,
+  Car,
+  Fuel,
 } from 'lucide-react';
 import {
   createInspectionSpreadsheet,
@@ -23,13 +32,18 @@ import {
   appendAuditLogToSheet,
   pullAllDataFromGoogleSheets,
   ensureAllSpreadsheetTabs,
+  syncDamageToSheet,
+  syncFuelLogsToSheet,
   INSPECTION_SHEET_TITLE,
   VEHICLES_SHEET_TITLE,
   STAFF_SHEET_TITLE,
   AUDIT_LOG_SHEET_TITLE,
+  DAMAGE_SHEET_TITLE,
+  FUEL_SHEET_TITLE,
 } from '../services/googleSheets';
 import { uploadInspectionMediaToDrive } from '../services/googleDrive';
 import { googleSignIn, getAccessToken } from '../services/firebaseAuth';
+import { getStoredDamageRecords, getStoredFuelLogs } from '../services/storage';
 import { User } from 'firebase/auth';
 
 interface GoogleSheetsModalProps {
@@ -44,10 +58,14 @@ interface GoogleSheetsModalProps {
   vehicles: AmbulanceVehicle[];
   staffList: UserProfile[];
   currentUser: UserProfile;
+  damageRecords?: VehicleDamageItem[];
+  fuelLogs?: FuelLogRecord[];
   onSyncBackData?: (data: {
     vehicles: AmbulanceVehicle[];
     staffList: UserProfile[];
     inspectionsCount: number;
+    damageRecords?: VehicleDamageItem[];
+    fuelLogs?: FuelLogRecord[];
   }) => void;
 }
 
@@ -63,6 +81,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   vehicles,
   staffList,
   currentUser,
+  damageRecords,
+  fuelLogs,
   onSyncBackData,
 }) => {
   const [spreadsheetId, setSpreadsheetId] = useState(config.spreadsheetId || '');
@@ -212,9 +232,20 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
         }
       }
 
-      // Sync active vehicles and staff
+      // Sync active vehicles, staff, damage records, and fuel logs
       await syncVehiclesToSheet(spreadsheetId, vehicles, token);
       await syncStaffToSheet(spreadsheetId, staffList, token);
+
+      const currentDamage = damageRecords || getStoredDamageRecords();
+      if (currentDamage.length > 0) {
+        await syncDamageToSheet(spreadsheetId, currentDamage, token);
+      }
+
+      const currentFuel = fuelLogs || getStoredFuelLogs();
+      if (currentFuel.length > 0) {
+        await syncFuelLogsToSheet(spreadsheetId, currentFuel, token);
+      }
+
       await appendAuditLogToSheet(
         spreadsheetId,
         {
@@ -224,7 +255,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           module: 'ระบบภาพรวม',
           targetItem: `สเปรดชีต ${spreadsheetId.slice(0, 10)}...`,
           operator: `${currentUser.name} (${currentUser.role === 'admin' ? 'Admin' : 'Staff'})`,
-          details: `ซิงค์ตรวจสภาพใหม่ ${count} รายการ, กองรถ ${vehicles.length} คัน, เจ้าหน้าที่ ${staffList.length} คน`,
+          details: `ซิงค์ตรวจสภาพ ${count} รายการ, กองรถ ${vehicles.length} คัน, เจ้าหน้าที่ ${staffList.length} คน, รอยรอบคัน ${currentDamage.length} จุด, เติมน้ำมัน ${currentFuel.length} ครั้ง`,
         },
         token
       );
@@ -237,7 +268,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 
       setStatusMessage({
         type: 'success',
-        text: `ซิงค์ตรวจสภาพ ${count} รายการ, กองรถ ${vehicles.length} คัน และเจ้าหน้าที่ ${staffList.length} คน ลง Google Sheets ครบถ้วน!`,
+        text: `ซิงค์ข้อมูลลง Google Sheets ครบถ้วนทั้ง 6 หมวด (ตรวจสภาพ ${count}, กองรถ ${vehicles.length}, เจ้าหน้าที่ ${staffList.length}, รอยรอบคัน ${currentDamage.length}, น้ำมัน ${currentFuel.length})!`,
       });
     } catch (err: any) {
       setStatusMessage({
@@ -413,8 +444,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 </a>
               </div>
 
-              {/* 4 Tabs Indicator Grid */}
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+              {/* 6 Tabs Indicator Grid */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
                 <div className="flex items-center gap-1.5 rounded-lg bg-white/70 p-2 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
                   <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   <span className="truncate">{INSPECTION_SHEET_TITLE}</span>
@@ -426,6 +457,14 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 <div className="flex items-center gap-1.5 rounded-lg bg-white/70 p-2 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
                   <Users className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                   <span className="truncate">{STAFF_SHEET_TITLE}</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-lg bg-white/70 p-2 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
+                  <Car className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                  <span className="truncate">{DAMAGE_SHEET_TITLE}</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-lg bg-white/70 p-2 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
+                  <Fuel className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">{FUEL_SHEET_TITLE}</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-lg bg-white/70 p-2 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
                   <Activity className="h-3.5 w-3.5 text-purple-600 shrink-0" />
@@ -440,7 +479,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 ยังไม่มีการเชื่อมต่อกับ Google Spreadsheet
               </p>
               <p className="mt-0.5 text-[11px] text-slate-400">
-                สร้างสเปรดชีตใหม่ 4 หมวด (ตรวจสภาพ, กองรถ, เจ้าหน้าที่, Audit Log) ได้ในคลิกเดียว
+                สร้างสเปรดชีตใหม่ 6 หมวด (ตรวจสภาพ, กองรถ, เจ้าหน้าที่, รอยตัวรถ, น้ำมัน, Audit Log) ได้ในคลิกเดียว
               </p>
               <button
                 type="button"
@@ -453,7 +492,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 ) : (
                   <Plus className="h-3.5 w-3.5" />
                 )}
-                <span>สร้าง Google Sheets อัตโนมัติ (4 หมวด)</span>
+                <span>สร้าง Google Sheets อัตโนมัติ (ครบ 6 หมวด)</span>
               </button>
             </div>
           )}

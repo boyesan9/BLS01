@@ -1,4 +1,11 @@
-import { AmbulanceVehicle, InspectionRecord, SystemAuditLogEntry, UserProfile } from '../types';
+import {
+  AmbulanceVehicle,
+  InspectionRecord,
+  SystemAuditLogEntry,
+  UserProfile,
+  VehicleDamageItem,
+  FuelLogRecord,
+} from '../types';
 import { createFreshChecklist } from '../data/defaultChecklist';
 
 export interface SheetCreationResult {
@@ -10,6 +17,8 @@ export const INSPECTION_SHEET_TITLE = 'บันทึกการตรวจ�
 export const VEHICLES_SHEET_TITLE = 'รายการรถกู้ชีพ_BLS';
 export const STAFF_SHEET_TITLE = 'รายชื่อเจ้าหน้าที่_BLS';
 export const AUDIT_LOG_SHEET_TITLE = 'บันทึกกิจกรรมระบบ_AuditLog';
+export const DAMAGE_SHEET_TITLE = 'รอยรอบตัวรถ_BLS';
+export const FUEL_SHEET_TITLE = 'ประวัติการเติมน้ำมัน_BLS';
 
 export const INSPECTION_HEADERS = [
   'วัน-เวลาที่ตรวจ',
@@ -69,8 +78,46 @@ export const AUDIT_LOG_HEADERS = [
   'รหัสกิจกรรม (Log ID)',
 ];
 
+export const DAMAGE_HEADERS = [
+  'วัน-เวลาที่ตรวจพบ',
+  'รหัสรถ',
+  'เลขทะเบียน',
+  'ตำแหน่งที่เกิดรอย',
+  'ระดับความเสียหาย',
+  'รายละเอียดลักษณะรอย',
+  'เลขไมล์ขณะพบรอย (กม.)',
+  'ผู้ตรวจพบ',
+  'สิทธิ์ผู้ตรวจ',
+  'ลิงก์รูปถ่าย Google Drive',
+  'รูปมุมอื่นๆ (Google Drive)',
+  'โฟลเดอร์ Drive',
+  'สถานะซ่อมสี/แก้ไข',
+  'รหัสรายการ (ID)',
+];
+
+export const FUEL_HEADERS = [
+  'วันที่-เวลาเติม',
+  'รหัสรถ',
+  'เลขทะเบียน',
+  'เลขไมล์ขณะเติม (กม.)',
+  'เลขไมล์ครั้งก่อน (กม.)',
+  'ระยะทางที่วิ่งได้ (กม.)',
+  'จำนวนลิตร',
+  'ยอดเงินรวม (บาท)',
+  'ราคาต่อลิตร (บาท/ลิตร)',
+  'อัตราสิ้นเปลือง (กม./ลิตร)',
+  'ค่าใช้จ่ายต่อกิโลเมตร (บาท/กม.)',
+  'ชนิดน้ำมัน',
+  'ปั๊มน้ำมัน / สถานี',
+  'ผู้เติม / พนักงานขับรถ',
+  'ลิงก์สลิป/ใบเสร็จ Google Drive',
+  'โฟลเดอร์ Drive',
+  'หมายเหตุ',
+  'รหัสบันทึก (ID)',
+];
+
 /**
- * Ensure all 4 required sheets exist in the spreadsheet and have proper headers.
+ * Ensure all 6 required sheets exist in the spreadsheet and have proper headers.
  */
 export async function ensureAllSpreadsheetTabs(
   spreadsheetId: string,
@@ -93,6 +140,8 @@ export async function ensureAllSpreadsheetTabs(
     { title: VEHICLES_SHEET_TITLE, headers: VEHICLE_HEADERS },
     { title: STAFF_SHEET_TITLE, headers: STAFF_HEADERS },
     { title: AUDIT_LOG_SHEET_TITLE, headers: AUDIT_LOG_HEADERS },
+    { title: DAMAGE_SHEET_TITLE, headers: DAMAGE_HEADERS },
+    { title: FUEL_SHEET_TITLE, headers: FUEL_HEADERS },
   ];
 
   const requestsToAdd: any[] = [];
@@ -139,12 +188,21 @@ export async function ensureAllSpreadsheetTabs(
 }
 
 /**
- * Create a new spreadsheet with all 4 BLS management sheets pre-configured.
+ * Create a new spreadsheet with all 6 BLS management sheets pre-configured.
  */
 export async function createInspectionSpreadsheet(
   accessToken: string,
   title = 'ระบบตรวจสภาพรถกู้ชีพ BLS - บันทึกส่วนกลาง'
 ): Promise<SheetCreationResult> {
+  const neededSheets = [
+    { title: INSPECTION_SHEET_TITLE, headers: INSPECTION_HEADERS },
+    { title: VEHICLES_SHEET_TITLE, headers: VEHICLE_HEADERS },
+    { title: STAFF_SHEET_TITLE, headers: STAFF_HEADERS },
+    { title: AUDIT_LOG_SHEET_TITLE, headers: AUDIT_LOG_HEADERS },
+    { title: DAMAGE_SHEET_TITLE, headers: DAMAGE_HEADERS },
+    { title: FUEL_SHEET_TITLE, headers: FUEL_HEADERS },
+  ];
+
   const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     headers: {
@@ -153,32 +211,12 @@ export async function createInspectionSpreadsheet(
     },
     body: JSON.stringify({
       properties: { title },
-      sheets: [
-        {
-          properties: {
-            title: INSPECTION_SHEET_TITLE,
-            gridProperties: { frozenRowCount: 1 },
-          },
+      sheets: neededSheets.map((item) => ({
+        properties: {
+          title: item.title,
+          gridProperties: { frozenRowCount: 1 },
         },
-        {
-          properties: {
-            title: VEHICLES_SHEET_TITLE,
-            gridProperties: { frozenRowCount: 1 },
-          },
-        },
-        {
-          properties: {
-            title: STAFF_SHEET_TITLE,
-            gridProperties: { frozenRowCount: 1 },
-          },
-        },
-        {
-          properties: {
-            title: AUDIT_LOG_SHEET_TITLE,
-            gridProperties: { frozenRowCount: 1 },
-          },
-        },
-      ],
+      })),
     }),
   });
 
@@ -192,18 +230,11 @@ export async function createInspectionSpreadsheet(
   const spreadsheetUrl =
     data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 
-  // Write header rows to all 4 tabs in parallel
-  const headerUpdates = [
-    { sheet: INSPECTION_SHEET_TITLE, headers: INSPECTION_HEADERS },
-    { sheet: VEHICLES_SHEET_TITLE, headers: VEHICLE_HEADERS },
-    { sheet: STAFF_SHEET_TITLE, headers: STAFF_HEADERS },
-    { sheet: AUDIT_LOG_SHEET_TITLE, headers: AUDIT_LOG_HEADERS },
-  ];
-
-  for (const item of headerUpdates) {
+  // Write header rows to all 6 tabs in parallel
+  for (const item of neededSheets) {
     await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-        item.sheet
+        item.title
       )}!A1:Z1?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
@@ -477,6 +508,8 @@ export async function pullAllDataFromGoogleSheets(
   vehicles: AmbulanceVehicle[];
   staffList: UserProfile[];
   inspectionsCount: number;
+  damageRecords: VehicleDamageItem[];
+  fuelLogs: FuelLogRecord[];
   pulledAt: string;
 }> {
   const pulledAt = new Date().toLocaleString('th-TH');
@@ -571,10 +604,263 @@ export async function pullAllDataFromGoogleSheets(
     inspectionsCount = (data.values || []).filter((r: any) => r && r[0]).length;
   }
 
+  // 4. Pull Damage Records
+  const damageUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    DAMAGE_SHEET_TITLE
+  )}!A2:N200`;
+  const damageRes = await fetch(damageUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  const damageRecords: VehicleDamageItem[] = [];
+  if (damageRes.ok) {
+    const data = await damageRes.json();
+    const rows: string[][] = data.values || [];
+    for (const r of rows) {
+      if (r[1] && r[3]) {
+        // Has vehicleCode and positionArea
+        damageRecords.push({
+          id: r[13] || `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          vehicleId: `veh-${r[1]}`,
+          vehicleCode: r[1],
+          plateNumber: r[2] || '',
+          positionArea: r[3],
+          severity: 'minor_scratch',
+          description: r[5] || '',
+          odometerAtReport: Number(r[6]) || undefined,
+          inspectorName: r[7] || 'เจ้าหน้าที่',
+          inspectorRole: (r[8] || '').includes('Admin') ? 'admin' : 'staff',
+          photoUrl: '',
+          drivePhotoUrl: r[9]?.startsWith('http') ? r[9] : undefined,
+          driveFolderUrl: r[11]?.startsWith('http') ? r[11] : undefined,
+          resolved: (r[12] || '').includes('ซ่อมสีแล้ว'),
+          createdAt: r[0] || '',
+          googleSheetsSyncStatus: 'synced',
+        });
+      }
+    }
+  }
+
+  // 5. Pull Fuel Logs
+  const fuelUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    FUEL_SHEET_TITLE
+  )}!A2:R200`;
+  const fuelRes = await fetch(fuelUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  const fuelLogs: FuelLogRecord[] = [];
+  if (fuelRes.ok) {
+    const data = await fuelRes.json();
+    const rows: string[][] = data.values || [];
+    for (const r of rows) {
+      if (r[0] && r[1]) {
+        fuelLogs.push({
+          id: r[17] || `fuel-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          vehicleId: `veh-${r[1]}`,
+          vehicleCode: r[1],
+          plateNumber: r[2] || '',
+          fuelDate: r[0],
+          odometer: Number(r[3]) || 0,
+          previousOdometer: Number(r[4]) || undefined,
+          distanceDriven: Number(String(r[5] || '').replace(/[^0-9.]/g, '')) || undefined,
+          liters: Number(r[6]) || 0,
+          totalCost: Number(r[7]) || 0,
+          pricePerLiter: Number(String(r[8] || '').replace(/[^0-9.]/g, '')) || undefined,
+          kmPerLiter: Number(String(r[9] || '').replace(/[^0-9.]/g, '')) || undefined,
+          costPerKm: Number(String(r[10] || '').replace(/[^0-9.]/g, '')) || undefined,
+          fuelType: r[11] || 'ดีเซล B7',
+          gasStation: r[12] || '',
+          driverName: r[13] || 'เจ้าหน้าที่',
+          receiptDriveUrl: r[14]?.startsWith('http') ? r[14] : undefined,
+          driveFolderUrl: r[15]?.startsWith('http') ? r[15] : undefined,
+          notes: r[16] || '',
+          createdAt: Date.now(),
+          googleSheetsSyncStatus: 'synced',
+        });
+      }
+    }
+  }
+
   return {
     vehicles,
     staffList,
     inspectionsCount,
+    damageRecords,
+    fuelLogs,
     pulledAt,
   };
+}
+
+/**
+ * Format damage record for sheet
+ */
+export function formatDamageForSheet(item: VehicleDamageItem): any[] {
+  const severityMap: Record<string, string> = {
+    minor_scratch: 'รอยขูดขีดตื้น (ขนแมว/ผิวสี)',
+    deep_scratch: 'รอยขูดขีดลึก (ถึงชั้นสีรองพื้น)',
+    dent: 'รอยบุบ / ยุบตัว',
+    crack: 'รอยแตกร้าว / แตกหัก',
+    rust: 'สนิม / ผุกร่อน',
+    paint_chip: 'สีหลุดร่อน / สะเก็ดหินกระเทาะ',
+  };
+
+  const addDrivePhotos = (item.driveAdditionalPhotoUrls || []).join(' | ');
+
+  return [
+    item.createdAt,
+    item.vehicleCode,
+    item.plateNumber,
+    item.positionArea,
+    severityMap[item.severity] || item.severity,
+    item.description || '-',
+    item.odometerAtReport || 0,
+    item.inspectorName,
+    item.inspectorRole === 'admin' ? 'ผู้ดูแลระบบ (Admin)' : 'พนักงานทั่วไป (Staff)',
+    item.drivePhotoUrl || (item.photoUrl ? 'มีภาพบันทึกในระบบ' : '-'),
+    addDrivePhotos || '-',
+    item.driveFolderUrl || '-',
+    item.resolved ? `ซ่อมสีแล้ว (${item.resolvedAt || '-'})` : 'ยังไม่ซ่อมสี/มีรอยอยู่',
+    item.id,
+  ];
+}
+
+/**
+ * Append single damage record to Sheet
+ */
+export async function appendDamageToSheet(
+  spreadsheetId: string,
+  item: VehicleDamageItem,
+  accessToken: string
+): Promise<{ success: boolean }> {
+  await ensureAllSpreadsheetTabs(spreadsheetId, accessToken);
+  const rowValues = formatDamageForSheet(item);
+
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    DAMAGE_SHEET_TITLE
+  )}!A:N:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+
+  const response = await fetch(appendUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: [rowValues] }),
+  });
+
+  return { success: response.ok };
+}
+
+/**
+ * Mirror / Sync entire Damage Records list to Sheet Tab
+ */
+export async function syncDamageToSheet(
+  spreadsheetId: string,
+  items: VehicleDamageItem[],
+  accessToken: string
+): Promise<void> {
+  await ensureAllSpreadsheetTabs(spreadsheetId, accessToken);
+  const rows = items.map(formatDamageForSheet);
+
+  const padded = [...rows];
+  while (padded.length < 50) {
+    padded.push(new Array(DAMAGE_HEADERS.length).fill(''));
+  }
+
+  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    DAMAGE_SHEET_TITLE
+  )}!A2:N52?valueInputOption=USER_ENTERED`;
+
+  await fetch(putUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: padded }),
+  });
+}
+
+/**
+ * Format fuel log record for sheet
+ */
+export function formatFuelLogForSheet(log: FuelLogRecord): any[] {
+  return [
+    log.fuelDate,
+    log.vehicleCode,
+    log.plateNumber,
+    log.odometer,
+    log.previousOdometer || '-',
+    log.distanceDriven ? `${log.distanceDriven} กม.` : '-',
+    log.liters,
+    log.totalCost,
+    log.pricePerLiter ? `${log.pricePerLiter} บ./ล.` : '-',
+    log.kmPerLiter ? `${log.kmPerLiter} กม./ลิตร` : '-',
+    log.costPerKm ? `${log.costPerKm} บ./กม.` : '-',
+    log.fuelType,
+    log.gasStation || '-',
+    log.driverName,
+    log.receiptDriveUrl || (log.receiptPhotoUrl ? 'มีภาพสลิปในระบบ' : '-'),
+    log.driveFolderUrl || '-',
+    log.notes || '-',
+    log.id,
+  ];
+}
+
+/**
+ * Append single fuel log to Sheet
+ */
+export async function appendFuelLogToSheet(
+  spreadsheetId: string,
+  log: FuelLogRecord,
+  accessToken: string
+): Promise<{ success: boolean }> {
+  await ensureAllSpreadsheetTabs(spreadsheetId, accessToken);
+  const rowValues = formatFuelLogForSheet(log);
+
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    FUEL_SHEET_TITLE
+  )}!A:R:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+
+  const response = await fetch(appendUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: [rowValues] }),
+  });
+
+  return { success: response.ok };
+}
+
+/**
+ * Mirror / Sync entire Fuel Logs list to Sheet Tab
+ */
+export async function syncFuelLogsToSheet(
+  spreadsheetId: string,
+  logs: FuelLogRecord[],
+  accessToken: string
+): Promise<void> {
+  await ensureAllSpreadsheetTabs(spreadsheetId, accessToken);
+  const rows = logs.map(formatFuelLogForSheet);
+
+  const padded = [...rows];
+  while (padded.length < 50) {
+    padded.push(new Array(FUEL_HEADERS.length).fill(''));
+  }
+
+  const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    FUEL_SHEET_TITLE
+  )}!A2:R52?valueInputOption=USER_ENTERED`;
+
+  await fetch(putUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: padded }),
+  });
 }

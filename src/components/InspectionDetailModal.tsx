@@ -279,10 +279,10 @@ export const InspectionDetailModal: React.FC<InspectionDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Checklist Table (7 Categories, 19 items) */}
+            {/* Checklist Table (7 Categories, 22 items) */}
             <div>
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                ผลการตรวจเช็คสภาพตัวรถ (7 หมวด 19 รายการ)
+                ผลการตรวจเช็คสภาพตัวรถ (7 หมวด 22 รายการ)
               </h4>
               <div className="space-y-4">
                 {categories.map((cat, cIdx) => (

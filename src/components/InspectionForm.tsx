@@ -405,12 +405,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         />
       </div>
 
-      {/* Section 3: รายการตรวจสอบตัวรถ 7 หมวด 19 รายการ */}
+      {/* Section 3: รายการตรวจสอบตัวรถ 7 หมวด 22 รายการ */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
           <div>
             <h4 className="text-base font-bold text-slate-900 dark:text-white">
-              รายการตรวจสอบสภาพรถยนต์ (7 หมวด 19 รายการ)
+              รายการตรวจสอบสภาพรถยนต์ (7 หมวด 22 รายการ)
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               ตรวจสอบตามเกณฑ์มาตรฐานความปลอดภัย และระบุปัญหาที่พบหากไม่พร้อมใช้งาน

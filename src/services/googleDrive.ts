@@ -1,4 +1,4 @@
-import { GoogleDriveLinks, InspectionRecord } from '../types';
+import { GoogleDriveLinks, InspectionRecord, VehicleDamageItem, FuelLogRecord } from '../types';
 
 // Convert base64 data URL to Blob
 export function dataUrlToBlob(dataUrl: string): { blob: Blob; mimeType: string } {
@@ -180,4 +180,77 @@ export async function uploadInspectionMediaToDrive(
   }
 
   return links;
+}
+
+// Upload damage photos (main and additional) to Google Drive
+export async function uploadDamagePhotosToDrive(
+  accessToken: string,
+  item: VehicleDamageItem
+): Promise<{ drivePhotoUrl?: string; driveAdditionalPhotoUrls: string[]; driveFolderUrl: string }> {
+  const { folderId, folderUrl } = await getOrCreateInspectionFolder(accessToken, 'BLS_Vehicle_Damage_Media');
+  const safeCode = (item.vehicleCode || 'BLS').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safePos = (item.positionArea || 'POS').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F-]/g, '_');
+  const safeId = item.id.slice(-6);
+
+  let drivePhotoUrl: string | undefined;
+  const driveAdditionalPhotoUrls: string[] = [];
+
+  // 1. Upload main photo
+  if (item.photoUrl && item.photoUrl.startsWith('data:')) {
+    const fileName = `${safeCode}_DAMAGE_${safePos}_${safeId}_MAIN.jpg`;
+    try {
+      const uploaded = await uploadFileToDrive(accessToken, fileName, item.photoUrl, folderId);
+      drivePhotoUrl = uploaded.webViewLink;
+    } catch (e) {
+      console.warn('Failed to upload main damage photo to Google Drive', e);
+    }
+  }
+
+  // 2. Upload additional photos
+  if (item.additionalPhotos && item.additionalPhotos.length > 0) {
+    for (let i = 0; i < item.additionalPhotos.length; i++) {
+      const pUrl = item.additionalPhotos[i];
+      if (pUrl && pUrl.startsWith('data:')) {
+        const fileName = `${safeCode}_DAMAGE_${safePos}_${safeId}_SUB${i + 1}.jpg`;
+        try {
+          const uploaded = await uploadFileToDrive(accessToken, fileName, pUrl, folderId);
+          driveAdditionalPhotoUrls.push(uploaded.webViewLink);
+        } catch (e) {
+          console.warn(`Failed to upload sub-damage photo ${i + 1} to Google Drive`, e);
+        }
+      }
+    }
+  }
+
+  return {
+    drivePhotoUrl,
+    driveAdditionalPhotoUrls,
+    driveFolderUrl: folderUrl,
+  };
+}
+
+// Upload fuel log receipt / slip to Google Drive
+export async function uploadFuelReceiptToDrive(
+  accessToken: string,
+  log: FuelLogRecord
+): Promise<{ receiptDriveUrl?: string; driveFolderUrl: string }> {
+  const { folderId, folderUrl } = await getOrCreateInspectionFolder(accessToken, 'BLS_Fuel_Receipts_Media');
+  const safeCode = (log.vehicleCode || 'BLS').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeId = log.id.slice(-6);
+
+  let receiptDriveUrl: string | undefined;
+  if (log.receiptPhotoUrl && log.receiptPhotoUrl.startsWith('data:')) {
+    const fileName = `${safeCode}_FUEL_RECEIPT_${safeId}.jpg`;
+    try {
+      const uploaded = await uploadFileToDrive(accessToken, fileName, log.receiptPhotoUrl, folderId);
+      receiptDriveUrl = uploaded.webViewLink;
+    } catch (e) {
+      console.warn('Failed to upload fuel slip to Google Drive', e);
+    }
+  }
+
+  return {
+    receiptDriveUrl,
+    driveFolderUrl: folderUrl,
+  };
 }

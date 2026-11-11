@@ -155,22 +155,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            แดชบอร์ดผู้ดูแลระบบยานพาหนะและบุคลากร (Admin Console)
+            {currentUser.role === 'admin'
+              ? 'แดชบอร์ดผู้ดูแลระบบยานพาหนะและบุคลากร (Admin Console)'
+              : 'แดชบอร์ดภาพรวมรถกู้ชีพ BLS และประวัติการตรวจ (Staff Dashboard)'}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            ภาพรวมความพร้อมของรถกู้ชีพ BLS ส่วนกลาง · ระบบจัดการพนักงาน · สถิติและการซิงค์ข้อมูล
+            {currentUser.role === 'admin'
+              ? 'ภาพรวมความพร้อมของรถกู้ชีพ BLS ส่วนกลาง · ระบบจัดการพนักงาน · สถิติและการซิงค์ข้อมูล'
+              : 'ภาพรวมสถานะความพร้อมของรถกู้ชีพส่วนกลาง · ประวัติการตรวจสภาพประจำเวร · พิมพ์ใบรายงานผล'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onOpenGoogleSheetsModal}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            <span>Google Sheets Auto-Sync</span>
-          </button>
+          {currentUser.role === 'admin' && (
+            <button
+              type="button"
+              onClick={onOpenGoogleSheetsModal}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span>Google Sheets Auto-Sync</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -297,7 +303,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Truck className="h-3.5 w-3.5" />
-          <span>จัดการข้อมูลรถกู้ชีพ BLS ({vehicles.length})</span>
+          <span>
+            {currentUser.role === 'admin'
+              ? `จัดการข้อมูลรถกู้ชีพ BLS (${vehicles.length})`
+              : `รายการรถกู้ชีพส่วนกลาง (${vehicles.length})`}
+          </span>
         </button>
 
         <button
@@ -309,7 +319,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Users className="h-3.5 w-3.5" />
-          <span>ระบบจัดการพนักงาน ({staffList.length})</span>
+          <span>
+            {currentUser.role === 'admin'
+              ? `ระบบจัดการพนักงาน (${staffList.length})`
+              : `รายชื่อเจ้าหน้าที่ประจำการ (${staffList.length})`}
+          </span>
         </button>
       </div>
 
@@ -601,18 +615,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 รายการรถยนต์กู้ชีพส่วนกลางในระบบ (Fleet List)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                เพิ่ม/แก้ไขข้อมูลรถกู้ชีพ BLS และอัปเดตสถานะความพร้อมใช้งาน
+                {currentUser.role === 'admin'
+                  ? 'เพิ่ม/แก้ไขข้อมูลรถกู้ชีพ BLS และอัปเดตสถานะความพร้อมใช้งาน'
+                  : 'ตรวจสอบข้อมูลรถกู้ชีพ BLS สถานะความพร้อม และเลขไมล์ล่าสุด'}
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => onOpenVehicleModal()}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-sky-500"
-            >
-              <Plus className="h-4 w-4" />
-              <span>เพิ่มรถกู้ชีพคันใหม่</span>
-            </button>
+            {currentUser.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => onOpenVehicleModal()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-sky-500"
+              >
+                <Plus className="h-4 w-4" />
+                <span>เพิ่มรถกู้ชีพคันใหม่</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -681,44 +699,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
 
                   {/* Status Toggle & Actions */}
-                  <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
-                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      ปรับสถานะด่วน:
-                    </label>
-                    <select
-                      value={veh.status}
-                      onChange={(e) => onUpdateVehicleStatus(veh.id, e.target.value as VehicleStatus)}
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    >
-                      <option value="available">พร้อมใช้งาน (ปกติ)</option>
-                      <option value="issue_found">พบปัญหา (เฝ้าระวัง)</option>
-                      <option value="maintenance">อยู่ระหว่างซ่อม (งดใช้)</option>
-                    </select>
+                  {currentUser.role === 'admin' ? (
+                    <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        ปรับสถานะด่วน:
+                      </label>
+                      <select
+                        value={veh.status}
+                        onChange={(e) => onUpdateVehicleStatus(veh.id, e.target.value as VehicleStatus)}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        <option value="available">พร้อมใช้งาน (ปกติ)</option>
+                        <option value="issue_found">พบปัญหา (เฝ้าระวัง)</option>
+                        <option value="maintenance">อยู่ระหว่างซ่อม (งดใช้)</option>
+                      </select>
 
-                    <div className="mt-2.5 flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onOpenVehicleModal(veh)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        <Edit2 className="h-3 w-3" /> แก้ไข
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeleteTarget({
-                            type: 'vehicle',
-                            id: veh.id,
-                            name: `รถกู้ชีพ ${veh.code} (ทะเบียน ${veh.plateNumber})`,
-                          });
-                        }}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                        title="ลบรถ"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="mt-2.5 flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onOpenVehicleModal(veh)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          <Edit2 className="h-3 w-3" /> แก้ไข
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteTarget({
+                              type: 'vehicle',
+                              id: veh.id,
+                              name: `รถกู้ชีพ ${veh.code} (ทะเบียน ${veh.plateNumber})`,
+                            });
+                          }}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                          title="ลบรถ"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="border-t border-slate-100 pt-3 dark:border-slate-800 flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-slate-500">สถานะความพร้อม:</span>
+                      <span
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${
+                          veh.status === 'available'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                            : veh.status === 'issue_found'
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                            : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300'
+                        }`}
+                      >
+                        {veh.status === 'available'
+                          ? 'พร้อมใช้งาน'
+                          : veh.status === 'issue_found'
+                          ? 'พบปัญหา'
+                          : 'ส่งซ่อม'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -732,23 +771,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                ระบบจัดการรายชื่อพนักงานและเจ้าหน้าที่กู้ชีพ (Staff Management)
+                {currentUser.role === 'admin'
+                  ? 'ระบบจัดการรายชื่อพนักงานและเจ้าหน้าที่กู้ชีพ (Staff Management)'
+                  : 'ทำเนียบรายชื่อเจ้าหน้าที่กู้ชีพประจำการ (Staff Directory)'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                เพิ่ม/แก้ไขข้อมูลเจ้าหน้าที่ กำหนดระดับสิทธิ์การเข้าใช้งาน และสถานะการเข้าเวร
+                {currentUser.role === 'admin'
+                  ? 'เพิ่ม/แก้ไขข้อมูลเจ้าหน้าที่ กำหนดระดับสิทธิ์การเข้าใช้งาน และสถานะการเข้าเวร'
+                  : 'ตรวจสอบรายชื่อเจ้าหน้าที่ประจำการ ข้อมูลติดต่อ และสถานะการเข้าเวร'}
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenStaffModal()}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-sky-500"
-              >
-                <Plus className="h-4 w-4" />
-                <span>เพิ่มพนักงานใหม่</span>
-              </button>
-            </div>
+            {currentUser.role === 'admin' && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenStaffModal()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-sky-500"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>เพิ่มพนักงานใหม่</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search bar */}
@@ -834,41 +879,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
 
                         <td className="px-4 py-3.5">
-                          <select
-                            value={staff.status || 'active'}
-                            onChange={(e) => onUpdateStaffStatus(staff.id, e.target.value as UserStatus)}
-                            className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          >
-                            <option value="active">พร้อมปฏิบัติงาน</option>
-                            <option value="on_leave">พักเวร / ลา</option>
-                            <option value="inactive">ระงับการใช้งาน</option>
-                          </select>
+                          {currentUser.role === 'admin' ? (
+                            <select
+                              value={staff.status || 'active'}
+                              onChange={(e) => onUpdateStaffStatus(staff.id, e.target.value as UserStatus)}
+                              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            >
+                              <option value="active">พร้อมปฏิบัติงาน</option>
+                              <option value="on_leave">พักเวร / ลา</option>
+                              <option value="inactive">ระงับการใช้งาน</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold ${
+                                staff.status === 'on_leave'
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                  : staff.status === 'inactive'
+                                  ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              }`}
+                            >
+                              {staff.status === 'on_leave'
+                                ? 'พักเวร / ลา'
+                                : staff.status === 'inactive'
+                                ? 'ไม่ได้ปฏิบัติงาน'
+                                : 'พร้อมปฏิบัติงาน'}
+                            </span>
+                          )}
                         </td>
 
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => onOpenStaffModal(staff)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                            >
-                              <Edit2 className="h-3 w-3" /> แก้ไข
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDeleteTarget({
-                                  type: 'staff',
-                                  id: staff.id,
-                                  name: `${staff.name} (รหัส ${staff.employeeId})`,
-                                });
-                              }}
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                              title="ลบพนักงาน"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
+                          {currentUser.role === 'admin' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onOpenStaffModal(staff)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <Edit2 className="h-3 w-3" /> แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteTarget({
+                                    type: 'staff',
+                                    id: staff.id,
+                                    name: `${staff.name} (รหัส ${staff.employeeId})`,
+                                  });
+                                }}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                title="ลบพนักงาน"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">-</span>
+                          )}
                         </td>
                       </tr>
                     ))

@@ -192,7 +192,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({ record, onClos
   </div>
 
   <div style="font-weight:bold; margin-bottom:4px; font-size:10px; color:#475569;">
-    รายการตรวจเช็คสภาพตัวรถ 7 หมวด 19 รายการ:
+    รายการตรวจเช็คสภาพตัวรถ 7 หมวด 22 รายการ:
   </div>
   <table>
     <thead>
@@ -442,7 +442,7 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({ record, onClos
           {/* 7-Category Checklist Table */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-              ผลการตรวจสภาพตัวรถ 7 หมวด 19 รายการ
+              ผลการตรวจสภาพตัวรถ 7 หมวด 22 รายการ
             </h4>
             <table className="w-full border-collapse border border-slate-200 text-xs">
               <thead>

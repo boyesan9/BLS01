@@ -6,6 +6,8 @@ import {
   UserProfile,
   UserRole,
   VehicleStatus,
+  VehicleDamageItem,
+  FuelLogRecord,
 } from './types';
 import {
   getStoredVehicles,
@@ -24,11 +26,19 @@ import {
   clearAllSystemData,
   resetToInitialDemoData,
   DEMO_USERS,
+  getStoredDamageRecords,
+  saveDamageRecord,
+  deleteDamageRecord,
+  getStoredFuelLogs,
+  saveFuelLog,
+  deleteFuelLog,
 } from './services/storage';
-import { Navbar } from './components/Navbar';
+import { Navbar, AppViewMode } from './components/Navbar';
 import { LoginView } from './components/LoginView';
 import { InspectionForm } from './components/InspectionForm';
 import { AdminDashboard } from './components/AdminDashboard';
+import { VehicleDamageView } from './components/VehicleDamageView';
+import { FuelLogView } from './components/FuelLogView';
 import { InspectionDetailModal } from './components/InspectionDetailModal';
 import { VehicleModal } from './components/VehicleModal';
 import { StaffModal } from './components/StaffModal';
@@ -43,8 +53,16 @@ import {
   syncStaffToSheet,
   appendAuditLogToSheet,
   pullAllDataFromGoogleSheets,
+  appendDamageToSheet,
+  syncDamageToSheet,
+  appendFuelLogToSheet,
+  syncFuelLogsToSheet,
 } from './services/googleSheets';
-import { uploadInspectionMediaToDrive } from './services/googleDrive';
+import {
+  uploadInspectionMediaToDrive,
+  uploadDamagePhotosToDrive,
+  uploadFuelReceiptToDrive,
+} from './services/googleDrive';
 import { syncInspectionsFromIndexedDb } from './services/storage';
 import { User } from 'firebase/auth';
 import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
@@ -52,10 +70,12 @@ import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
 export default function App() {
   const [currentUser, setCurrentUserState] = useState<UserProfile | null>(() => getCurrentUser());
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true); // Logged in with default persona for instant testing
-  const [currentView, setCurrentView] = useState<'form' | 'dashboard'>('form');
+  const [currentView, setCurrentView] = useState<AppViewMode>('form');
 
   const [vehicles, setVehicles] = useState<AmbulanceVehicle[]>(() => getStoredVehicles());
   const [inspections, setInspections] = useState<InspectionRecord[]>(() => getStoredInspections());
+  const [damageRecords, setDamageRecords] = useState<VehicleDamageItem[]>(() => getStoredDamageRecords());
+  const [fuelLogs, setFuelLogs] = useState<FuelLogRecord[]>(() => getStoredFuelLogs());
 
   const [selectedRecordDetail, setSelectedRecordDetail] = useState<InspectionRecord | null>(null);
   const [recordToPrint, setRecordToPrint] = useState<InspectionRecord | null>(null);
@@ -162,11 +182,13 @@ export default function App() {
     }
   };
 
-  // Two-way Sync Back handler from Google Sheets
+  // Two-way Sync Back handler from Google Sheets (covers all modules)
   const handleSyncBackData = (data: {
     vehicles: AmbulanceVehicle[];
     staffList: UserProfile[];
     inspectionsCount: number;
+    damageRecords?: VehicleDamageItem[];
+    fuelLogs?: FuelLogRecord[];
   }) => {
     if (data.vehicles && data.vehicles.length > 0) {
       setVehicles(data.vehicles);
@@ -176,14 +198,30 @@ export default function App() {
       setStaffList(data.staffList);
       saveStaff(data.staffList);
     }
-    // Also re-hydrate inspections from storage
+    if (data.damageRecords && data.damageRecords.length > 0) {
+      setDamageRecords(data.damageRecords);
+      try {
+        localStorage.setItem('bls_damage_records_v1', JSON.stringify(data.damageRecords));
+      } catch (e) {
+        console.warn('Storage warning:', e);
+      }
+    }
+    if (data.fuelLogs && data.fuelLogs.length > 0) {
+      setFuelLogs(data.fuelLogs);
+      try {
+        localStorage.setItem('bls_fuel_logs_v1', JSON.stringify(data.fuelLogs));
+      } catch (e) {
+        console.warn('Storage warning:', e);
+      }
+    }
+    // Re-hydrate inspections from storage
     const storedInspections = getStoredInspections();
     setInspections(storedInspections);
 
     setToastNotification({
       type: 'success',
-      title: 'ดึงข้อมูลคืน (Sync Back) สำเร็จ',
-      message: `กู้คืนข้อมูลจาก Google Sheets เรียบร้อย (รถ ${data.vehicles.length} คัน, เจ้าหน้าที่ ${data.staffList.length} คน, บันทึกตรวจ ${data.inspectionsCount} รายการ)`,
+      title: 'ดึงข้อมูลคืน (Sync Back) สำเร็จทุกฟังก์ชัน',
+      message: `กู้คืนข้อมูลครบถ้วนจาก Google Sheets (รถ ${data.vehicles.length} คัน, เจ้าหน้าที่ ${data.staffList.length} คน, รอยรอบตัวรถ ${data.damageRecords?.length || 0} จุด, ประวัติน้ำมัน ${data.fuelLogs?.length || 0} รายการ)`,
     });
   };
 
@@ -329,12 +367,8 @@ export default function App() {
           : undefined,
       });
 
-      // Switch view after submitting (Admins review dashboard, Staff stay on form)
-      if (currentUser?.role === 'admin') {
-        setCurrentView('dashboard');
-      } else {
-        setCurrentView('form');
-      }
+      // Switch to dashboard to review history
+      setCurrentView('dashboard');
     } catch (err: any) {
       console.error(err);
       setToastNotification({
@@ -718,6 +752,230 @@ export default function App() {
     );
   };
 
+  // Damage Records handlers with Google Drive & Sheets Auto-Sync
+  const handleSaveDamage = async (item: VehicleDamageItem) => {
+    let itemToSave = { ...item };
+    let driveSucceeded = false;
+    let syncSucceeded = false;
+    const targetSpreadsheetId = googleSheetsConfig.spreadsheetId;
+
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        // 1. Upload photos to Google Drive
+        try {
+          const driveRes = await uploadDamagePhotosToDrive(token, itemToSave);
+          itemToSave.drivePhotoUrl = driveRes.drivePhotoUrl;
+          itemToSave.driveAdditionalPhotoUrls = driveRes.driveAdditionalPhotoUrls;
+          itemToSave.driveFolderUrl = driveRes.driveFolderUrl;
+          driveSucceeded = Boolean(driveRes.drivePhotoUrl || (driveRes.driveAdditionalPhotoUrls && driveRes.driveAdditionalPhotoUrls.length > 0));
+        } catch (driveErr) {
+          console.warn('Google Drive damage photo upload warning:', driveErr);
+        }
+
+        // 2. Append to Google Sheets Tab 'รอยรอบตัวรถ_BLS'
+        if (targetSpreadsheetId) {
+          try {
+            await appendDamageToSheet(targetSpreadsheetId, itemToSave, token);
+            syncSucceeded = true;
+            itemToSave.googleSheetsSyncStatus = 'synced';
+          } catch (sheetErr) {
+            console.warn('Google Sheets damage append warning:', sheetErr);
+          }
+        }
+      }
+    } catch (cloudErr) {
+      console.warn('Google Workspace sync warning:', cloudErr);
+    }
+
+    const updated = saveDamageRecord(itemToSave);
+    setDamageRecords(updated);
+
+    // Auto-sync entire damage records table to Google Sheets in background
+    if (targetSpreadsheetId) {
+      getAccessToken().then((token) => {
+        if (token && targetSpreadsheetId) {
+          syncDamageToSheet(targetSpreadsheetId, updated, token).catch(console.warn);
+        }
+      });
+    }
+
+    const totalPhotos = 1 + (item.additionalPhotos?.length || 0);
+    logSystemActivityAndSyncSheets(
+      'บันทึกรอยรอบตัวรถ',
+      'รอยรอบตัวรถ',
+      `${item.vehicleCode} (${item.plateNumber})`,
+      `ตำแหน่ง: ${item.positionArea} · ระดับ: ${item.severity} · รูปภาพ: ${totalPhotos} รูป · รายละเอียด: ${item.description || '-'} ${driveSucceeded ? '· อัปโหลดลง Drive แล้ว' : ''}`
+    );
+
+    const statusDesc = [];
+    if (driveSucceeded) statusDesc.push('อัปโหลดรูปถ่ายลง Google Drive');
+    if (syncSucceeded) statusDesc.push('บันทึกข้อมูลลง Google Sheets');
+
+    setToastNotification({
+      type: 'success',
+      title: 'บันทึกรอยตัวรถสำเร็จ',
+      message:
+        statusDesc.length > 0
+          ? `บันทึกรอย "${item.positionArea}" ของรถ ${item.vehicleCode} (${totalPhotos} รูป) และ ${statusDesc.join(' + ')} เรียบร้อยแล้ว`
+          : `บันทึกรอย "${item.positionArea}" ของรถ ${item.vehicleCode} (${totalPhotos} รูป) ในระบบเรียบร้อยแล้ว`,
+      linkUrl: itemToSave.driveFolderUrl || itemToSave.drivePhotoUrl || googleSheetsConfig.spreadsheetUrl,
+      linkText: itemToSave.driveFolderUrl || itemToSave.drivePhotoUrl
+        ? 'เปิดดูรูปใน Google Drive'
+        : syncSucceeded
+        ? 'เปิดดูใน Google Sheets'
+        : undefined,
+    });
+  };
+
+  const handleDeleteDamage = (id: string) => {
+    const target = damageRecords.find((d) => d.id === id);
+    const updated = deleteDamageRecord(id);
+    setDamageRecords(updated);
+
+    if (googleSheetsConfig.spreadsheetId) {
+      getAccessToken().then((token) => {
+        if (token && googleSheetsConfig.spreadsheetId) {
+          syncDamageToSheet(googleSheetsConfig.spreadsheetId, updated, token).catch(console.warn);
+        }
+      });
+    }
+
+    logSystemActivityAndSyncSheets(
+      'ลบข้อมูลรอยตัวรถ',
+      'รอยรอบตัวรถ',
+      target ? `${target.vehicleCode} - ${target.positionArea}` : id,
+      `ลบประวัติรอยตัวรถออกจากระบบและอัปเดตลง Google Sheets`
+    );
+    setToastNotification({
+      type: 'info',
+      title: 'ลบข้อมูลรอยตัวรถแล้ว',
+      message: 'ลบประวัติรอยตัวรถออกจากระบบและอัปเดตลง Google Sheets เรียบร้อยแล้ว',
+    });
+  };
+
+  // Fuel Log handlers with Google Drive & Sheets Auto-Sync
+  const handleSaveFuelLog = async (log: FuelLogRecord) => {
+    let logToSave = { ...log };
+    let driveSucceeded = false;
+    let syncSucceeded = false;
+    const targetSpreadsheetId = googleSheetsConfig.spreadsheetId;
+
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        // 1. Upload receipt / slip photo to Google Drive
+        if (logToSave.receiptPhotoUrl && logToSave.receiptPhotoUrl.startsWith('data:')) {
+          try {
+            const driveRes = await uploadFuelReceiptToDrive(token, logToSave);
+            logToSave.receiptDriveUrl = driveRes.receiptDriveUrl;
+            logToSave.driveFolderUrl = driveRes.driveFolderUrl;
+            driveSucceeded = Boolean(driveRes.receiptDriveUrl);
+          } catch (driveErr) {
+            console.warn('Google Drive fuel receipt upload warning:', driveErr);
+          }
+        }
+
+        // 2. Append to Google Sheets Tab 'ประวัติการเติมน้ำมัน_BLS'
+        if (targetSpreadsheetId) {
+          try {
+            await appendFuelLogToSheet(targetSpreadsheetId, logToSave, token);
+            syncSucceeded = true;
+            logToSave.googleSheetsSyncStatus = 'synced';
+          } catch (sheetErr) {
+            console.warn('Google Sheets fuel append warning:', sheetErr);
+          }
+        }
+      }
+    } catch (cloudErr) {
+      console.warn('Google Workspace sync warning:', cloudErr);
+    }
+
+    const updated = saveFuelLog(logToSave);
+    setFuelLogs(updated);
+
+    // Update vehicle's currentOdometer if fuel log odometer is higher
+    const vehIdx = vehicles.findIndex((v) => v.id === log.vehicleId);
+    if (vehIdx >= 0 && log.odometer > (vehicles[vehIdx].currentOdometer || 0)) {
+      const updatedVehicles = [...vehicles];
+      updatedVehicles[vehIdx] = {
+        ...updatedVehicles[vehIdx],
+        currentOdometer: log.odometer,
+      };
+      setVehicles(updatedVehicles);
+      saveVehicles(updatedVehicles);
+
+      if (targetSpreadsheetId) {
+        getAccessToken().then((token) => {
+          if (token && targetSpreadsheetId) {
+            syncVehiclesToSheet(targetSpreadsheetId, updatedVehicles, token).catch(console.warn);
+          }
+        });
+      }
+    }
+
+    // Auto-sync entire fuel logs list to Google Sheets
+    if (targetSpreadsheetId) {
+      getAccessToken().then((token) => {
+        if (token && targetSpreadsheetId) {
+          syncFuelLogsToSheet(targetSpreadsheetId, updated, token).catch(console.warn);
+        }
+      });
+    }
+
+    logSystemActivityAndSyncSheets(
+      'บันทึกเติมน้ำมัน',
+      'ประวัติเติมน้ำมัน',
+      `${log.vehicleCode} (${log.plateNumber})`,
+      `ไมล์: ${log.odometer.toLocaleString()} กม. · ${log.liters} ลิตร (${log.totalCost.toLocaleString()} บ.) · วิ่งได้: ${log.distanceDriven ? `${log.distanceDriven.toLocaleString()} กม.` : '-'} ${driveSucceeded ? '· แนบสลิปใน Drive แล้ว' : ''}`
+    );
+
+    const statusDesc = [];
+    if (driveSucceeded) statusDesc.push('บันทึกภาพสลิป/ใบเสร็จลง Google Drive');
+    if (syncSucceeded) statusDesc.push('บันทึกข้อมูลลง Google Sheets');
+
+    setToastNotification({
+      type: 'success',
+      title: 'บันทึกประวัติเติมน้ำมันสำเร็จ',
+      message:
+        statusDesc.length > 0
+          ? `บันทึกการเติมน้ำมันรถ ${log.vehicleCode} และ ${statusDesc.join(' + ')} เรียบร้อยแล้ว`
+          : `บันทึกการเติมน้ำมันรถ ${log.vehicleCode} เลขไมล์ ${log.odometer.toLocaleString()} กม. เรียบร้อยแล้ว`,
+      linkUrl: logToSave.receiptDriveUrl || logToSave.driveFolderUrl || googleSheetsConfig.spreadsheetUrl,
+      linkText: logToSave.receiptDriveUrl
+        ? 'เปิดดูสลิปใน Google Drive'
+        : syncSucceeded
+        ? 'เปิดดูใน Google Sheets'
+        : undefined,
+    });
+  };
+
+  const handleDeleteFuelLog = (id: string) => {
+    const target = fuelLogs.find((f) => f.id === id);
+    const updated = deleteFuelLog(id);
+    setFuelLogs(updated);
+
+    if (googleSheetsConfig.spreadsheetId) {
+      getAccessToken().then((token) => {
+        if (token && googleSheetsConfig.spreadsheetId) {
+          syncFuelLogsToSheet(googleSheetsConfig.spreadsheetId, updated, token).catch(console.warn);
+        }
+      });
+    }
+
+    logSystemActivityAndSyncSheets(
+      'ลบประวัติเติมน้ำมัน',
+      'ประวัติเติมน้ำมัน',
+      target ? `${target.vehicleCode} (${target.fuelDate})` : id,
+      `ลบข้อมูลการเติมน้ำมันออกจากระบบและอัปเดตลง Google Sheets`
+    );
+    setToastNotification({
+      type: 'info',
+      title: 'ลบข้อมูลเติมน้ำมันแล้ว',
+      message: 'ลบรายการบันทึกการเติมน้ำมันและอัปเดต Google Sheets เรียบร้อยแล้ว',
+    });
+  };
+
   // Export CSV
   const handleExportCsv = () => {
     if (!inspections.length) {
@@ -783,12 +1041,7 @@ export default function App() {
       <Navbar
         currentUser={currentUser}
         currentView={currentView}
-        onViewChange={(view) => {
-          if (view === 'dashboard' && currentUser?.role !== 'admin') {
-            return;
-          }
-          setCurrentView(view);
-        }}
+        onViewChange={setCurrentView}
         onOpenGoogleSheets={() => {
           if (currentUser?.role === 'admin') {
             setGoogleSheetsModalOpen(true);
@@ -801,16 +1054,18 @@ export default function App() {
 
       {/* Main Body */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
-        {currentView === 'form' || currentUser?.role !== 'admin' ? (
+        {currentView === 'form' && (
           <InspectionForm
             currentUser={currentUser}
             vehicles={vehicles}
             staffList={staffList}
             onSubmitInspection={handleSubmitInspection}
-            onCancel={currentUser?.role === 'admin' ? () => setCurrentView('dashboard') : undefined}
+            onCancel={() => setCurrentView('dashboard')}
             isSubmitting={isSubmittingInspection}
           />
-        ) : (
+        )}
+
+        {currentView === 'dashboard' && (
           <AdminDashboard
             currentUser={currentUser}
             vehicles={vehicles}
@@ -838,6 +1093,26 @@ export default function App() {
             onExportCsv={handleExportCsv}
             onPrintInspection={(rec) => setRecordToPrint(rec)}
             onClearAllSystemData={handleClearAllSystemData}
+          />
+        )}
+
+        {currentView === 'damage' && (
+          <VehicleDamageView
+            currentUser={currentUser}
+            vehicles={vehicles}
+            damageRecords={damageRecords}
+            onSaveDamage={handleSaveDamage}
+            onDeleteDamage={handleDeleteDamage}
+          />
+        )}
+
+        {currentView === 'fuel' && (
+          <FuelLogView
+            currentUser={currentUser}
+            vehicles={vehicles}
+            fuelLogs={fuelLogs}
+            onSaveFuelLog={handleSaveFuelLog}
+            onDeleteFuelLog={handleDeleteFuelLog}
           />
         )}
       </main>
@@ -897,6 +1172,8 @@ export default function App() {
         vehicles={vehicles}
         staffList={staffList}
         currentUser={currentUser}
+        damageRecords={damageRecords}
+        fuelLogs={fuelLogs}
         onSyncBackData={handleSyncBackData}
       />
 

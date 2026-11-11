@@ -1,4 +1,11 @@
-import { AmbulanceVehicle, GoogleSheetsConfig, InspectionRecord, UserProfile } from '../types';
+import {
+  AmbulanceVehicle,
+  GoogleSheetsConfig,
+  InspectionRecord,
+  UserProfile,
+  VehicleDamageItem,
+  FuelLogRecord,
+} from '../types';
 import { createFreshChecklist } from '../data/defaultChecklist';
 
 const VEHICLES_STORAGE_KEY = 'bls_vehicles_fleet_v1';
@@ -475,5 +482,271 @@ export function saveGoogleSheetsConfig(config: GoogleSheetsConfig) {
     localStorage.setItem(GSHEETS_CONFIG_KEY, JSON.stringify(config));
   } catch (e) {
     console.error(e);
+  }
+}
+
+// ============================================
+// รอยรอบตัวรถ (Damage Records) Persistence
+// ============================================
+const DAMAGE_RECORDS_KEY = 'bls_vehicle_damages_v1';
+
+export function generateSvgDamagePlaceholder(area: string, description: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450">
+    <rect width="600" height="450" fill="#1e293b" />
+    <circle cx="300" cy="190" r="100" fill="#334155" stroke="#f59e0b" stroke-width="4" stroke-dasharray="8 6"/>
+    <path d="M 240 170 Q 290 220 360 180 M 270 150 L 330 230" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <text x="300" y="330" fill="#f8fafc" font-size="20" font-family="sans-serif" font-weight="bold" text-anchor="middle">
+      ตำแหน่ง: ${area}
+    </text>
+    <text x="300" y="365" fill="#94a3b8" font-size="14" font-family="sans-serif" text-anchor="middle">
+      ${description}
+    </text>
+    <rect x="20" y="20" width="130" height="32" rx="6" fill="#ef4444" opacity="0.9"/>
+    <text x="85" y="41" fill="#ffffff" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">
+      รอยแผลตัวรถ
+    </text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+export const INITIAL_DAMAGE_ITEMS: VehicleDamageItem[] = [
+  {
+    id: 'dmg-01',
+    vehicleId: 'veh-01',
+    vehicleCode: 'BLS-01',
+    plateNumber: '1กข 4589 กรุงเทพมหานคร',
+    positionArea: 'กันชนหน้าด้านขวา',
+    description: 'รอยขูดขีดสีถลอกยาวประมาณ 10 ซม. จากกิ่งไม้ขณะเข้าพื้นที่ชุมชนซอยแคบ',
+    severity: 'minor_scratch',
+    photoUrl: generateSvgDamagePlaceholder('กันชนหน้าขวา', 'รอยขูดขีดสีถลอก 10 ซม.'),
+    createdAt: '08/11/2569 09:30',
+    inspectorName: 'พ.ต.ต. ธนกร มั่นคง',
+    inspectorRole: 'admin',
+    odometerAtReport: 142320,
+    resolved: false,
+  },
+  {
+    id: 'dmg-02',
+    vehicleId: 'veh-02',
+    vehicleCode: 'BLS-02',
+    plateNumber: '3ฒภ 9812 กรุงเทพมหานคร',
+    positionArea: 'ซุ้มล้อหลังซ้าย',
+    description: 'รอยบุบเล็กน้อยและสีถลอกจากการเลี้ยวเฉียดขอบทางเท้า',
+    severity: 'dent',
+    photoUrl: generateSvgDamagePlaceholder('ซุ้มล้อหลังซ้าย', 'รอยบุบและสีถลอก'),
+    createdAt: '07/11/2569 16:15',
+    inspectorName: 'วิชัย ชาญวิทย์',
+    inspectorRole: 'staff',
+    odometerAtReport: 98100,
+    resolved: false,
+  },
+  {
+    id: 'dmg-03',
+    vehicleId: 'veh-03',
+    vehicleCode: 'BLS-03',
+    plateNumber: '2ขค 7714 กรุงเทพมหานคร',
+    positionArea: 'ฝากระโปรงหน้า',
+    description: 'รอยสะเก็ดหินดีดใส่ผิวสีเป็นจุดเล็กๆ 3 จุด',
+    severity: 'paint_chip',
+    photoUrl: generateSvgDamagePlaceholder('ฝากระโปรงหน้า', 'รอยสะเก็ดหินดีด'),
+    createdAt: '09/11/2569 11:20',
+    inspectorName: 'ประเสริฐ ยืนยง',
+    inspectorRole: 'staff',
+    odometerAtReport: 188950,
+    resolved: false,
+  },
+];
+
+export function getStoredDamageRecords(): VehicleDamageItem[] {
+  try {
+    const data = localStorage.getItem(DAMAGE_RECORDS_KEY);
+    if (!data) {
+      localStorage.setItem(DAMAGE_RECORDS_KEY, JSON.stringify(INITIAL_DAMAGE_ITEMS));
+      return INITIAL_DAMAGE_ITEMS;
+    }
+    return JSON.parse(data);
+  } catch (e) {
+    console.error('Error loading damage records', e);
+    return INITIAL_DAMAGE_ITEMS;
+  }
+}
+
+export function saveDamageRecord(item: VehicleDamageItem): VehicleDamageItem[] {
+  try {
+    const list = getStoredDamageRecords();
+    const idx = list.findIndex((d) => d.id === item.id);
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.unshift(item);
+    }
+    localStorage.setItem(DAMAGE_RECORDS_KEY, JSON.stringify(list));
+    return list;
+  } catch (e) {
+    console.error('Error saving damage record', e);
+    return getStoredDamageRecords();
+  }
+}
+
+export function deleteDamageRecord(id: string): VehicleDamageItem[] {
+  try {
+    const list = getStoredDamageRecords().filter((d) => d.id !== id);
+    localStorage.setItem(DAMAGE_RECORDS_KEY, JSON.stringify(list));
+    return list;
+  } catch (e) {
+    console.error('Error deleting damage record', e);
+    return getStoredDamageRecords();
+  }
+}
+
+// ============================================
+// ประวัติการเติมน้ำมัน (Fuel Log) Persistence
+// ============================================
+const FUEL_LOGS_KEY = 'bls_fuel_logs_v1';
+
+export const INITIAL_FUEL_LOGS: FuelLogRecord[] = [
+  {
+    id: 'fuel-01',
+    vehicleId: 'veh-01',
+    vehicleCode: 'BLS-01',
+    plateNumber: '1กข 4589 กรุงเทพมหานคร',
+    fuelDate: '02/11/2569 08:30',
+    odometer: 141750,
+    liters: 55.0,
+    totalCost: 1760,
+    pricePerLiter: 32.0,
+    fuelType: 'ดีเซล B7',
+    gasStation: 'ปตท. สำนักงานใหญ่',
+    driverName: 'สมนึก มีพร้อม',
+    notes: 'เติมเต็มถังก่อนเริ่มผลัดเวรประจำเดือน',
+    createdAt: Date.now() - 3600000 * 24 * 8,
+  },
+  {
+    id: 'fuel-02',
+    vehicleId: 'veh-01',
+    vehicleCode: 'BLS-01',
+    plateNumber: '1กข 4589 กรุงเทพมหานคร',
+    fuelDate: '06/11/2569 14:15',
+    odometer: 142300,
+    previousOdometer: 141750,
+    distanceDriven: 550,
+    liters: 52.4,
+    totalCost: 1676,
+    pricePerLiter: 32.0,
+    fuelType: 'ดีเซล B7',
+    gasStation: 'บางจาก พระราม 9',
+    driverName: 'วิชัย ชาญวิทย์',
+    kmPerLiter: 10.5,
+    costPerKm: 3.05,
+    notes: 'วิ่งออกเหตุฉุกเฉินโซนตะวันออก 14 เที่ยว',
+    createdAt: Date.now() - 3600000 * 24 * 4,
+  },
+  {
+    id: 'fuel-03',
+    vehicleId: 'veh-01',
+    vehicleCode: 'BLS-01',
+    plateNumber: '1กข 4589 กรุงเทพมหานคร',
+    fuelDate: '09/11/2569 17:40',
+    odometer: 142850,
+    previousOdometer: 142300,
+    distanceDriven: 550,
+    liters: 53.0,
+    totalCost: 1696,
+    pricePerLiter: 32.0,
+    fuelType: 'ดีเซล B7',
+    gasStation: 'ปตท. แจ้งวัฒนะ',
+    driverName: 'สมนึก มีพร้อม',
+    kmPerLiter: 10.38,
+    costPerKm: 3.08,
+    notes: 'เติมเต็มถังหลังส่งเวร 24 ชม.',
+    createdAt: Date.now() - 3600000 * 24 * 1,
+  },
+  {
+    id: 'fuel-04',
+    vehicleId: 'veh-02',
+    vehicleCode: 'BLS-02',
+    plateNumber: '3ฒภ 9812 กรุงเทพมหานคร',
+    fuelDate: '04/11/2569 10:00',
+    odometer: 97850,
+    liters: 50.0,
+    totalCost: 1600,
+    pricePerLiter: 32.0,
+    fuelType: 'ดีเซล B7',
+    gasStation: 'เชลล์ วิภาวดี',
+    driverName: 'วิชัย ชาญวิทย์',
+    createdAt: Date.now() - 3600000 * 24 * 6,
+  },
+  {
+    id: 'fuel-05',
+    vehicleId: 'veh-02',
+    vehicleCode: 'BLS-02',
+    plateNumber: '3ฒภ 9812 กรุงเทพมหานคร',
+    fuelDate: '08/11/2569 16:30',
+    odometer: 98420,
+    previousOdometer: 97850,
+    distanceDriven: 570,
+    liters: 51.5,
+    totalCost: 1648,
+    pricePerLiter: 32.0,
+    fuelType: 'ดีเซล B7',
+    gasStation: 'ปตท. ดอนเมือง',
+    driverName: 'วิชัย ชาญวิทย์',
+    kmPerLiter: 11.07,
+    costPerKm: 2.89,
+    notes: 'อัตราสิ้นเปลืองประหยัด วิ่งสายเหนือคล่องตัว',
+    createdAt: Date.now() - 3600000 * 24 * 2,
+  },
+];
+
+export function getStoredFuelLogs(): FuelLogRecord[] {
+  try {
+    const data = localStorage.getItem(FUEL_LOGS_KEY);
+    if (!data) {
+      localStorage.setItem(FUEL_LOGS_KEY, JSON.stringify(INITIAL_FUEL_LOGS));
+      return INITIAL_FUEL_LOGS;
+    }
+    return JSON.parse(data);
+  } catch (e) {
+    console.error('Error loading fuel logs', e);
+    return INITIAL_FUEL_LOGS;
+  }
+}
+
+/**
+ * Get the latest recorded fuel odometer for a given vehicle
+ */
+export function getLatestFuelOdometer(vehicleId: string): number | null {
+  const logs = getStoredFuelLogs().filter((l) => l.vehicleId === vehicleId);
+  if (logs.length === 0) return null;
+  // Sort descending by odometer
+  logs.sort((a, b) => b.odometer - a.odometer);
+  return logs[0].odometer;
+}
+
+export function saveFuelLog(record: FuelLogRecord): FuelLogRecord[] {
+  try {
+    const list = getStoredFuelLogs();
+    const idx = list.findIndex((f) => f.id === record.id);
+    if (idx >= 0) {
+      list[idx] = record;
+    } else {
+      list.unshift(record);
+    }
+    localStorage.setItem(FUEL_LOGS_KEY, JSON.stringify(list));
+    return list;
+  } catch (e) {
+    console.error('Error saving fuel log', e);
+    return getStoredFuelLogs();
+  }
+}
+
+export function deleteFuelLog(id: string): FuelLogRecord[] {
+  try {
+    const list = getStoredFuelLogs().filter((f) => f.id !== id);
+    localStorage.setItem(FUEL_LOGS_KEY, JSON.stringify(list));
+    return list;
+  } catch (e) {
+    console.error('Error deleting fuel log', e);
+    return getStoredFuelLogs();
   }
 }

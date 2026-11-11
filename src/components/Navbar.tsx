@@ -1,11 +1,13 @@
 import React from 'react';
 import { UserProfile, UserRole } from '../types';
-import { Shield, FileSpreadsheet, User, LogOut, PlusCircle, LayoutDashboard } from 'lucide-react';
+import { Shield, FileSpreadsheet, User, LogOut, Car, Fuel } from 'lucide-react';
+
+export type AppViewMode = 'form' | 'dashboard' | 'damage' | 'fuel';
 
 interface NavbarProps {
   currentUser: UserProfile;
-  currentView: 'form' | 'dashboard';
-  onViewChange: (view: 'form' | 'dashboard') => void;
+  currentView: AppViewMode;
+  onViewChange: (view: AppViewMode) => void;
   onOpenGoogleSheets: () => void;
   onSwitchRole: (role: UserRole) => void;
   onLogout: () => void;
@@ -23,7 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-8 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6">
         {/* Zone 1: Brand title, one line */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-white shadow-sm">
@@ -40,8 +42,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Zone 2: Nav links - Admin sees all menus, Staff only sees inspection form */}
-        <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-600 dark:text-slate-300">
+        {/* Zone 2: Nav links - Accessible to both Admin and Staff */}
+        <nav className="hidden lg:flex items-center gap-5 text-xs font-semibold text-slate-600 dark:text-slate-300">
           <button
             onClick={() => onViewChange('form')}
             className={`transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
@@ -53,30 +55,52 @@ export const Navbar: React.FC<NavbarProps> = ({
             แบบฟอร์มตรวจรถ
           </button>
 
-          {currentUser.role === 'admin' && (
-            <>
-              <button
-                onClick={() => onViewChange('dashboard')}
-                className={`transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
-                  currentView === 'dashboard'
-                    ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
-                    : 'border-transparent hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                แดชบอร์ดผู้ดูแล
-              </button>
+          <button
+            onClick={() => onViewChange('dashboard')}
+            className={`transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
+              currentView === 'dashboard'
+                ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                : 'border-transparent hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            {currentUser.role === 'admin' ? 'แดชบอร์ดผู้ดูแล' : 'แดชบอร์ดภาพรวม'}
+          </button>
 
-              <button
-                onClick={onOpenGoogleSheets}
-                className="inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 hover:text-slate-900 dark:hover:text-white"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                <span>Google Sheets</span>
-                {sheetsConnected && (
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                )}
-              </button>
-            </>
+          <button
+            onClick={() => onViewChange('damage')}
+            className={`inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
+              currentView === 'damage'
+                ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                : 'border-transparent hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Car className="h-3.5 w-3.5 text-amber-500" />
+            <span>รอยรอบตัวรถ</span>
+          </button>
+
+          <button
+            onClick={() => onViewChange('fuel')}
+            className={`inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
+              currentView === 'fuel'
+                ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                : 'border-transparent hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Fuel className="h-3.5 w-3.5 text-emerald-500" />
+            <span>ประวัติเติมน้ำมัน</span>
+          </button>
+
+          {currentUser.role === 'admin' && (
+            <button
+              onClick={onOpenGoogleSheets}
+              className="inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 hover:text-slate-900 dark:hover:text-white"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Google Sheets</span>
+              {sheetsConnected && (
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              )}
+            </button>
           )}
         </nav>
 
